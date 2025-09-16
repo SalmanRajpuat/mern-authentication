@@ -1,0 +1,6 @@
+flask
+flask-cors
+ultralytics==8.0.20
+opencv-python
+pillow
+numpy

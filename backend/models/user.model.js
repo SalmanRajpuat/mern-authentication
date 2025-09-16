@@ -14,6 +14,11 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    gender: {
+        type: String,
+        enum: ['Male', 'Female', 'Other'],
+        required: true
+    },
     lastLogin: {
         type: Date,
         default: Date.now

@@ -6,13 +6,24 @@ import { Mail,ArrowLeft,Loader } from 'lucide-react';
 import Input from "../components/Input";
 
 const ForgotPasswordPage = () => {
-  const [email,setEmail] = useState(false);
+  const [email,setEmail] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   const handleSubmit = async (e) =>{
     e.preventDefault();
-		await forgotPassword(email);
-		setIsSubmitted(true);
+    console.log("Submitting forgot password for email:", email);
+    if (!email) {
+      console.error("Email is empty!");
+      return;
+    }
+    try {
+      await forgotPassword(email);
+      setIsSubmitted(true);
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      console.error("Error response:", error.response?.data);
+      // Error will be handled by the authStore and displayed in UI
+    }
   }
   
   

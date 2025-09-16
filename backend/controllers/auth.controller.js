@@ -10,9 +10,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export const signup = async (req, res) => {
-    const {email, password, name} = req.body;
+    const {email, password, name, gender} = req.body;
     try {
-        if(!email || !password || !name){
+        if(!email || !password || !name || !gender){
             throw new Error("All fileds are required");
         }
 
@@ -27,6 +27,7 @@ export const signup = async (req, res) => {
             email,
             password: hashedPassword,
             name,
+            gender,
             verificationToken,
             verificationTokenExpiresAt: Date.now()+24*60*60*1000// = 24 hours
         })
@@ -34,7 +35,7 @@ export const signup = async (req, res) => {
         await user.save();
         generateTokenAndSetCookie(res,user._id);
 
-        sendVerificationCode(user.email,verificationToken);
+        await sendVerificationCode(user.email,verificationToken);
 
         res.status(201).json({
             success: true,
@@ -116,7 +117,10 @@ export const verifyEmail = async (req,res) => {
     return res.status(201).json({
         success: true,
         message: "Email verified successfully",
-
+        user: {
+            ...user._doc,
+            password: undefined,
+        },
     });
 
 
@@ -129,6 +133,8 @@ export const verifyEmail = async (req,res) => {
 
 export const forgotPassword = async (req,res) => {
     const {email} = req.body;
+    console.log("Received forgot password request for email:", email);
+    console.log("Request body:", req.body);
     try {
         const user = await User.findOne({email});
 

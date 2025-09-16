@@ -1,33 +1,32 @@
 import { motion } from "framer-motion";
 import Input from "../components/Input";
-import { Mail, User,Lock, Loader } from "lucide-react";
+import { Mail, User, Lock, Loader, Mars, Venus, Circle } from "lucide-react";
 import { useState } from "react";
-import {Link, useNavigate} from 'react-router-dom';
+import { Link, useNavigate } from "react-router-dom";
 import PasswordStrengthMeter from "../components/PasswordStrengthMeter";
 import { useAuthStore } from "../store/authStore";
 
 const SignUpPage = () => {
   const [name, setName] = useState("");
+  const [gender, setGender] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const {signup,error, isLoading} = useAuthStore();
+  const { signup, error, isLoading } = useAuthStore();
   const navigate = useNavigate();
 
-  const handleSignup = async(e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
   };
 
-
-
   const handleSubmit = async (e) => {
-  e.preventDefault(); // prevent form reload if it's in a <form>
-  try {
-    await signup(email, password, name); // ✅ Now valid
-    navigate("/verify-email");
-  } catch (error) {
-    console.log(error);
-  }
-};
+    e.preventDefault(); // prevent form reload if it's in a <form>
+    try {
+      await signup(email, password, name, gender); // ✅ Now valid
+      navigate("/verify-email");
+    } catch (error) {
+      console.log(error);
+    }
+  };
 
   return (
     <motion.div
@@ -65,14 +64,44 @@ const SignUpPage = () => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          {error && (
-  <p className="text-red-500 font-semibold text-sm text-center">{error}</p>
-)}
 
+          <Input
+            icon={
+              gender === "Male"
+                ? Mars
+                : gender === "Female"
+                ? Venus
+                : gender === "Other"
+                ? Circle
+                : Venus
+            }
+            as="select"
+            value={gender}
+            placeholder="Select Gender"
+            onChange={(e) => setGender(e.target.value)}
+            required
+          >
+            <option value="" className="bg-gray-900 text-white">
+              Select Gender
+            </option>
+            <option value="Male" className="bg-gray-900 text-green-400">
+              Male
+            </option>
+            <option value="Female" className="bg-gray-900 text-pink-400">
+              Female
+            </option>
+            <option value="Other" className="bg-gray-900 text-emerald-400">
+              Other
+            </option>
+          </Input>
+          {error && (
+            <p className="text-red-500 font-semibold text-sm text-center">
+              {error}
+            </p>
+          )}
 
           {/* Password strength meter*/}
-            <PasswordStrengthMeter password={password} />
-
+          <PasswordStrengthMeter password={password} />
 
           <motion.button
             className="mt-5 w-full py-3 px-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white 
@@ -83,20 +112,23 @@ const SignUpPage = () => {
             type="submit"
             disabled={isLoading}
           >
-            {isLoading ? <Loader className="animate-spin mx-auto" size={24}/> : "Sign Up"}
-           
+            {isLoading ? (
+              <Loader className="animate-spin mx-auto" size={24} />
+            ) : (
+              "Sign Up"
+            )}
           </motion.button>
         </form>
       </div>
 
-    <div className='px-8 py-4 bg-gray-900 bg-opacity-50 flex justify-center'>
-				<p className='text-sm text-gray-400'>
-					Already have an account?{" "}
-					<Link to={"/login"} className='text-green-400 hover:underline'>
-						Login
-					</Link>
-				</p>
-	</div>
+      <div className="px-8 py-4 bg-gray-900 bg-opacity-50 flex justify-center">
+        <p className="text-sm text-gray-400">
+          Already have an account?{" "}
+          <Link to={"/login"} className="text-green-400 hover:underline">
+            Login
+          </Link>
+        </p>
+      </div>
     </motion.div>
   );
 };
