@@ -1,0 +1,15 @@
+# YOLO Dataset Configuration for bicycle
+# Generated: 2026-02-23 10:30:00
+
+path: C:\Users\salma\Desktop\project\mern-authentication\DetectionModel\custom_objects\yolo_datasets\bicycle
+train: images/train
+val: images/train  # Using same for validation (split manually if needed)
+
+# Classes
+nc: 1  # number of classes
+names: ['bicycle']  # class names
+
+# Training Info
+# Total images: 6
+# Object name: bicycle
+# Display name: bicycle

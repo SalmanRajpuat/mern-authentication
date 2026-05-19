@@ -56,13 +56,16 @@ export const signup = async (req, res) => {
 export const login = async (req, res) => {
     const {email, password} = req.body;
     try {
+        console.log("Login attempt for:", email);
         const user = await User.findOne({email});
         if(!user){
+            console.log("User not found:", email);
             return res.status(400).json({success: false, message: "Invalid Credentials"});
         }
         const isPasswordValid = await bcryptjs.compare(password, user.password);
 
         if(!isPasswordValid){
+            console.log("Invalid password for:", email);
             return res.status(400).json({success: false, message: "Invalid Password"});
         }
 
@@ -80,7 +83,7 @@ export const login = async (req, res) => {
         });
 
     } catch (error) {
-        console.log("Error in here");
+        console.log("Error in login:", error.message);
         res.status(400).json({success: false, message: error.message});
     }
 };

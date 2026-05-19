@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import Input from "../components/Input";
-import { Mail, User, Lock, Loader, Mars, Venus, Circle } from "lucide-react";
+import { Mail, User, Lock, Loader, Mars, Venus, Circle, Shield, Users } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import PasswordStrengthMeter from "../components/PasswordStrengthMeter";
@@ -11,6 +11,7 @@ const SignUpPage = () => {
   const [gender, setGender] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState("user");
   const { signup, error, isLoading } = useAuthStore();
   const navigate = useNavigate();
 
@@ -21,7 +22,7 @@ const SignUpPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault(); // prevent form reload if it's in a <form>
     try {
-      await signup(email, password, name, gender); // ✅ Now valid
+      await signup(email, password, name, gender, role);
       navigate("/verify-email");
     } catch (error) {
       console.log(error);
@@ -92,6 +93,22 @@ const SignUpPage = () => {
             </option>
             <option value="Other" className="bg-gray-900 text-emerald-400">
               Other
+            </option>
+          </Input>
+
+          <Input
+            icon={role === "admin" ? Shield : Users}
+            as="select"
+            value={role}
+            placeholder="Select Role"
+            onChange={(e) => setRole(e.target.value)}
+            required
+          >
+            <option value="user" className="bg-gray-900 text-green-400">
+              👤 User - Object Detection
+            </option>
+            <option value="admin" className="bg-gray-900 text-yellow-400">
+              🛡️ Admin - Model Training & Management
             </option>
           </Input>
           {error && (

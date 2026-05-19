@@ -4,6 +4,8 @@ import dotenv from "dotenv";
 import { connectDB } from './db/connectDB.js';
 import express from "express";
 import authRoutes from "./routes/auth.route.js";
+import adminRoutes from "./routes/admin.route.js";
+import detectionRoutes from "./routes/detection.route.js";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import path from "path";
@@ -30,6 +32,8 @@ app.use(cookieParser());
 
 
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/detection", detectionRoutes);
 
 if(process.env.NODE_ENV === "production"){
     app.use(express.static(path.join(__dirname, "/frontend/dist")));
@@ -39,7 +43,7 @@ if(process.env.NODE_ENV === "production"){
     });
 }
 
-app.listen(5000, () =>{
+app.listen(PORT, () =>{
     connectDB();
-    console.log("Server is running on PORT", PORT); 
+    console.log("Server is running on PORT:", PORT); 
 })

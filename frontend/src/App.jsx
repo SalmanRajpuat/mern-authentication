@@ -3,9 +3,10 @@ import { Routes, Route } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { Navigate } from "react-router-dom";
 import LoadingSpinner from "./components/LoadingSpinner";
-//import ProtectedRoute from './components/ProtectedRoute';
-//import RedirectAuthenticatedUser from './components/RedirectAuthenticatedUser';
 import DashboardPage from './pages/DashboardPage';
+import AdminPanel from './pages/AdminPanel';
+import UserDetectionPage from './pages/UserDetectionPage';
+import DetectionHistoryPage from './pages/DetectionHistoryPage';
 import SignUpPage from "./pages/SignUpPage";
 import LoginPage from "./pages/LoginPage";
 import EmailVerificationPage from './pages/EmailVerificationPage';
@@ -14,7 +15,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage';
 import { useAuthStore } from "./store/authStore";
 import {useEffect } from "react"; 
 
-//to protect our routes
+//to protect our routes - redirects based on role
 const ProtectedRoute = ({children})=>{
  const {isAuthenticated,user} = useAuthStore();
 
@@ -26,7 +27,12 @@ if(!user?.isVerified){
   return <Navigate to="/verify-email" replace />
  }
 
- return children;
+ // Role-based routing
+ if(user?.role === 'admin'){
+  return <Navigate to="/admin" replace />
+ } else {
+  return <Navigate to="/detection" replace />
+ }
 }
 
 //redirect authenticated users to homepage
@@ -34,11 +40,53 @@ const RedirectAuthenticatedUser = ({children})=>{
   const {isAuthenticated,user} = useAuthStore();
 
   if(isAuthenticated && user.isVerified){
-    return <Navigate to ="/" replace />
+    // Role-based redirect
+    if(user?.role === 'admin'){
+      return <Navigate to="/admin" replace />
+    } else {
+      return <Navigate to="/detection" replace />
+    }
   }
 
   return children;
+}
 
+// Admin only route
+const AdminRoute = ({children}) => {
+  const {isAuthenticated, user} = useAuthStore();
+
+  if(!isAuthenticated){
+    return <Navigate to="/login" replace />
+  }
+
+  if(!user?.isVerified){
+    return <Navigate to="/verify-email" replace />
+  }
+
+  if(user?.role !== 'admin'){
+    return <Navigate to="/detection" replace />
+  }
+
+  return children;
+}
+
+// User only route
+const UserRoute = ({children}) => {
+  const {isAuthenticated, user} = useAuthStore();
+
+  if(!isAuthenticated){
+    return <Navigate to="/login" replace />
+  }
+
+  if(!user?.isVerified){
+    return <Navigate to="/verify-email" replace />
+  }
+
+  if(user?.role === 'admin'){
+    return <Navigate to="/admin" replace />
+  }
+
+  return children;
 }
 
 function App() {
@@ -74,12 +122,32 @@ function App() {
       />
 
       <Routes>
-        
-
+        {/* Landing route - redirects based on role */}
         <Route path="/" element={
           <ProtectedRoute>
             <DashboardPage/>
-            </ProtectedRoute> 
+          </ProtectedRoute> 
+        } />
+
+        {/* Admin Panel - Only accessible to admins */}
+        <Route path="/admin" element={
+          <AdminRoute>
+            <AdminPanel/>
+          </AdminRoute>
+        } />
+
+        {/* User Detection Page - Only accessible to regular users */}
+        <Route path="/detection" element={
+          <UserRoute>
+            <UserDetectionPage/>
+          </UserRoute>
+        } />
+
+        {/* Detection History Page - Only accessible to regular users */}
+        <Route path="/detection/history" element={
+          <UserRoute>
+            <DetectionHistoryPage/>
+          </UserRoute>
         } />
 
         <Route path="/signup" element={<RedirectAuthenticatedUser>

@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../store/authStore';
 import { formatDate } from '../utils/date';
-import { User, LogOut, Upload, Camera, Play, Image, FileVideo, Zap, Video, Eye } from 'lucide-react';
+import { User, LogOut, Upload, Camera, Play, Image, FileVideo, Zap, Video, Eye, Shield } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 const DETECTION_API_URL = 'http://localhost:5001';
@@ -10,6 +11,7 @@ const DETECTION_API_URL = 'http://localhost:5001';
 const DashboardPage = () => {
 
     const { user, logout } = useAuthStore();
+    const navigate = useNavigate();
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [selectedFile, setSelectedFile] = useState(null);
     const [isDetecting, setIsDetecting] = useState(false);
@@ -20,6 +22,15 @@ const DashboardPage = () => {
     const dropdownRef = useRef(null);
     const fileInputRef = useRef(null);
     const videoRef = useRef(null);
+    const canvasRef = useRef(null);
+    const detectionIntervalRef = useRef(null);
+    const [videoProgress, setVideoProgress] = useState(0);
+    const [isProcessingVideo, setIsProcessingVideo] = useState(false);
+    const [countingLinePosition, setCountingLinePosition] = useState(50); // 50% = center
+    const [videoPreview, setVideoPreview] = useState(null);
+    const [isDraggingLine, setIsDraggingLine] = useState(false);
+    const videoPreviewRef = useRef(null);
+    const [currentSessionId, setCurrentSessionId] = useState(null);
 
     const handleLogout = () =>{
         logout();
@@ -39,8 +50,102 @@ const DashboardPage = () => {
             // Set detection mode based on file type
             if (file.type.startsWith('image/')) {
                 setDetectionMode('image');
+                setVideoPreview(null);
             } else if (file.type.startsWith('video/')) {
                 setDetectionMode('video');
+                // Create video preview
+                const videoURL = URL.createObjectURL(file);
+                setVideoPreview(videoURL);
+                setCountingLinePosition(50); // Reset line to center
+            }
+        }
+    };
+
+    const handleLineMouseDown = (e) => {
+        e.preventDefault();
+        setIsDraggingLine(true);
+    };
+
+    const handleLineMouseMove = async (e) => {
+        if (!isDraggingLine || !videoPreviewRef.current) return;
+        
+        const rect = videoPreviewRef.current.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const percentage = Math.max(10, Math.min(90, (y / rect.height) * 100));
+        setCountingLinePosition(percentage);
+        
+        // Update line position in backend if video is processing
+        if (currentSessionId && isProcessingVideo) {
+            try {
+                await axios.post(`${DETECTION_API_URL}/detect/video/update-line`, {
+                    session_id: currentSessionId,
+                    line_position: percentage / 100
+                }, {
+                    headers: { 'Content-Type': 'application/json' },
+                    withCredentials: false
+                });
+            } catch (error) {
+                console.error('Error updating line position:', error);
+            }
+        }
+    };
+
+    const handleLineMouseUp = () => {
+        setIsDraggingLine(false);
+    };
+
+    const captureAndDetectFrame = async () => {
+        if (!videoRef.current || !canvasRef.current) {
+            console.log('Video or canvas ref not available');
+            return;
+        }
+
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        
+        // Check if video is ready
+        if (video.videoWidth === 0 || video.videoHeight === 0) {
+            console.log('Video not ready yet, skipping frame...');
+            return;
+        }
+        
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+        
+        // Convert canvas to base64
+        const frameData = canvas.toDataURL('image/jpeg', 0.8);
+        
+        console.log(`Sending frame for detection (${canvas.width}x${canvas.height})...`);
+        
+        try {
+            const response = await axios.post(`${DETECTION_API_URL}/detect/webcam/frame`, 
+                { frame: frameData },
+                {
+                    headers: { 'Content-Type': 'application/json' },
+                    timeout: 10000,
+                    withCredentials: false
+                }
+            );
+
+            console.log('Detection response:', response.data);
+
+            if (response.data.status === 'success') {
+                setAnnotatedImage(response.data.annotated_frame);
+                setDetectionResults({
+                    detected_objects: response.data.detections || [],
+                    total_detections: response.data.total_objects || 0,
+                    processing_time: 'Live',
+                    message: 'Live detection active'
+                });
+                console.log('Detections:', response.data.detections);
+            }
+        } catch (error) {
+            console.error('Frame detection error:', error);
+            if (error.response) {
+                console.error('Error response:', error.response.data);
             }
         }
     };
@@ -76,33 +181,169 @@ const DashboardPage = () => {
                 if (response.data.annotated_image) {
                     setAnnotatedImage(response.data.annotated_image);
                 }
+                
+                if (response.data.success) {
+                    setDetectionResults({
+                        detected_objects: response.data.detected_objects || [],
+                        total_detections: response.data.detected_objects?.length || 0,
+                        processing_time: 'N/A',
+                        message: 'Detection complete'
+                    });
+                }
             } else if (detectionMode === 'video') {
                 formData.append('video', selectedFile);
-                console.log('Sending video detection request...');
-                response = await axios.post(`${DETECTION_API_URL}/detect/video`, formData, {
+                formData.append('line_position', (countingLinePosition / 100).toString()); // Convert % to 0.0-1.0
+                console.log('Uploading video for detection...');
+                console.log('Counting line position:', countingLinePosition + '%');
+                
+                // Upload video first
+                const uploadResponse = await axios.post(`${DETECTION_API_URL}/detect/video/upload`, formData, {
                     headers: { 'Content-Type': 'multipart/form-data' },
-                    timeout: 90000,
-                    withCredentials: false
-                });
-            } else if (detectionMode === 'webcam') {
-                console.log('Sending webcam detection request...');
-                response = await axios.post(`${DETECTION_API_URL}/detect/webcam/start`, {}, {
                     timeout: 30000,
                     withCredentials: false
                 });
-                setIsWebcamActive(true);
+                
+                if (uploadResponse.data.status === 'success') {
+                    const sessionId = uploadResponse.data.session_id;
+                    const totalFrames = uploadResponse.data.total_frames;
+                    console.log(`Video uploaded. Session: ${sessionId}, Total frames: ${totalFrames}`);
+                    
+                    setCurrentSessionId(sessionId);
+                    setIsProcessingVideo(true);
+                    setVideoProgress(0);
+                    
+                    // Process frames one by one
+                    const allDetections = {};
+                    
+                    const processNextFrame = async () => {
+                        try {
+                            const frameResponse = await axios.post(
+                                `${DETECTION_API_URL}/detect/video/process-frame`,
+                                { session_id: sessionId },
+                                {
+                                    headers: { 'Content-Type': 'application/json' },
+                                    timeout: 15000,
+                                    withCredentials: false
+                                }
+                            );
+                            
+                            if (frameResponse.data.status === 'completed') {
+                                console.log('Video processing completed!');
+                                console.log('Saved video:', frameResponse.data.saved_video);
+                                console.log('Final counts:', frameResponse.data.final_counts);
+                                
+                                // Convert final_counts object to array format
+                                let finalCountsArray = [];
+                                let totalCount = 0;
+                                
+                                if (frameResponse.data.final_counts) {
+                                    if (Array.isArray(frameResponse.data.final_counts)) {
+                                        finalCountsArray = frameResponse.data.final_counts;
+                                        totalCount = finalCountsArray.reduce((sum, d) => sum + d.count, 0);
+                                    } else {
+                                        // It's an object like {car: 3, person: 5}
+                                        finalCountsArray = Object.entries(frameResponse.data.final_counts).map(([className, count]) => ({
+                                            class: className,
+                                            count: count,
+                                            confidence: 1.0
+                                        }));
+                                        totalCount = Object.values(frameResponse.data.final_counts).reduce((sum, count) => sum + count, 0);
+                                    }
+                                }
+                                
+                                setDetectionResults({
+                                    detected_objects: finalCountsArray,
+                                    total_detections: totalCount,
+                                    processing_time: 'Complete',
+                                    message: `✅ ${totalCount} unique objects crossed the line | Video saved`
+                                });
+                                
+                                setIsProcessingVideo(false);
+                                setVideoProgress(100);
+                                setIsDetecting(false);
+                                setCurrentSessionId(null);
+                                
+                                const countSummary = finalCountsArray.map(d => `${d.class}: ${d.count}`).join('\n');
+                                alert(`✅ Video processing complete!\n\n📊 Objects That Crossed Line:\n${countSummary || 'None'}\n\n📁 Saved to: ${frameResponse.data.saved_video}`);
+                                return;
+                            }
+                            
+                            if (frameResponse.data.status === 'success') {
+                                // Update annotated frame
+                                setAnnotatedImage(frameResponse.data.annotated_frame);
+                                
+                                // Use crossed_counts from backend (objects that crossed the line)
+                                let crossedCountsArray = [];
+                                let totalCrossed = 0;
+                                
+                                if (frameResponse.data.crossed_counts) {
+                                    if (typeof frameResponse.data.crossed_counts === 'object' && !Array.isArray(frameResponse.data.crossed_counts)) {
+                                        // It's an object like {car: 3, person: 5}
+                                        crossedCountsArray = Object.entries(frameResponse.data.crossed_counts).map(([className, count]) => ({
+                                            class: className,
+                                            count: count,
+                                            confidence: 1.0
+                                        }));
+                                        totalCrossed = Object.values(frameResponse.data.crossed_counts).reduce((sum, count) => sum + count, 0);
+                                    } else if (Array.isArray(frameResponse.data.crossed_counts)) {
+                                        crossedCountsArray = frameResponse.data.crossed_counts;
+                                        totalCrossed = crossedCountsArray.reduce((sum, d) => sum + d.count, 0);
+                                    }
+                                }
+                                
+                                setDetectionResults({
+                                    detected_objects: crossedCountsArray,
+                                    total_detections: totalCrossed,
+                                    processing_time: 'Processing...',
+                                    message: `Frame ${frameResponse.data.frame_number}/${totalFrames} | 🎯 ${totalCrossed} objects crossed`
+                                });
+                                
+                                // Update progress
+                                setVideoProgress(frameResponse.data.progress);
+                                
+                                // Process next frame with small delay
+                                setTimeout(processNextFrame, 50);
+                            }
+                        } catch (error) {
+                            console.error('Error processing frame:', error);
+                            setIsProcessingVideo(false);
+                            setIsDetecting(false);
+                            alert('Error processing video: ' + error.message);
+                        }
+                    };
+                    
+                    // Start processing
+                    processNextFrame();
+                    return; // Don't set isDetecting to false
+                }
+            } else if (detectionMode === 'webcam') {
+                console.log('Starting live webcam detection...');
+                
+                // Wait for video to be ready before starting detection
+                if (videoRef.current && videoRef.current.videoWidth > 0) {
+                    console.log('Video ready, starting detection interval');
+                    // Start continuous detection loop
+                    detectionIntervalRef.current = setInterval(captureAndDetectFrame, 1500); // Detect every 1.5 seconds
+                    
+                    // Also capture first frame immediately
+                    setTimeout(captureAndDetectFrame, 500);
+                } else {
+                    console.log('Waiting for video to be ready...');
+                    // Wait for video to load and then start
+                    const checkVideo = setInterval(() => {
+                        if (videoRef.current && videoRef.current.videoWidth > 0) {
+                            clearInterval(checkVideo);
+                            console.log('Video ready, starting detection interval');
+                            detectionIntervalRef.current = setInterval(captureAndDetectFrame, 1500);
+                            setTimeout(captureAndDetectFrame, 500);
+                        }
+                    }, 100);
+                }
+                return; // Don't set isDetecting to false
             }
 
-            console.log('Detection response:', response.data);
+            console.log('Detection response:', response?.data);
 
-            if (response.data.status === 'success') {
-                setDetectionResults({
-                    detected_objects: response.data.detections || [],
-                    total_detections: response.data.detections?.length || 0,
-                    processing_time: response.data.processing_time || 'N/A',
-                    message: response.data.message
-                });
-            }
         } catch (error) {
             console.error('Detection error details:', error);
             
@@ -121,7 +362,9 @@ const DashboardPage = () => {
             
             alert(errorMessage);
         } finally {
-            setIsDetecting(false);
+            if (detectionMode !== 'webcam') {
+                setIsDetecting(false);
+            }
         }
     };
 
@@ -135,6 +378,7 @@ const DashboardPage = () => {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
+                setIsWebcamActive(true);
             }
         } catch (error) {
             console.error('Webcam access denied:', error);
@@ -143,13 +387,48 @@ const DashboardPage = () => {
     };
 
     const stopWebcam = () => {
+        // Stop detection interval
+        if (detectionIntervalRef.current) {
+            clearInterval(detectionIntervalRef.current);
+            detectionIntervalRef.current = null;
+        }
+        
         if (videoRef.current && videoRef.current.srcObject) {
             const tracks = videoRef.current.srcObject.getTracks();
             tracks.forEach(track => track.stop());
             videoRef.current.srcObject = null;
         }
         setIsWebcamActive(false);
+        setIsDetecting(false);
+
+    // Handle line dragging
+    useEffect(() => {
+        if (isDraggingLine) {
+            document.addEventListener('mousemove', handleLineMouseMove);
+            document.addEventListener('mouseup', handleLineMouseUp);
+        } else {
+            document.removeEventListener('mousemove', handleLineMouseMove);
+            document.removeEventListener('mouseup', handleLineMouseUp);
+        }
+        
+        return () => {
+            document.removeEventListener('mousemove', handleLineMouseMove);
+            document.removeEventListener('mouseup', handleLineMouseUp);
+        };
+    }, [isDraggingLine]);
+
+    // Cleanup video preview URL
+    useEffect(() => {
+        return () => {
+            if (videoPreview) {
+                URL.revokeObjectURL(videoPreview);
+            }
+        };
+    }, [videoPreview]);
+    
         setDetectionMode('image');
+        setAnnotatedImage(null);
+        setDetectionResults(null);
     };
 
     // Close dropdown when clicking outside
@@ -216,20 +495,43 @@ const DashboardPage = () => {
                                 </p>
                                 
                                 {/* User Email */}
-                                <p className='text-gray-400 text-sm mb-4'>
+                                <p className='text-gray-400 text-sm mb-2'>
                                     {user?.email || 'user@example.com'}
                                 </p>
                                 
-                                {/* Logout Button */}
-                                <motion.button
-                                    whileHover={{ scale: 1.02 }}
-                                    whileTap={{ scale: 0.98 }}
-                                    onClick={handleLogout}
-                                    className='w-full flex items-center justify-center space-x-2 py-2 px-4 bg-gradient-to-r from-red-500 to-red-600 text-white font-medium rounded-lg hover:from-red-600 hover:to-red-700 transition-colors'
-                                >
-                                    <LogOut className='w-4 h-4' />
-                                    <span>Logout</span>
-                                </motion.button>
+                                {/* Role Badge */}
+                                {user?.role === 'admin' && (
+                                    <div className='flex items-center space-x-1 bg-emerald-500 bg-opacity-20 text-emerald-400 px-2 py-1 rounded text-xs font-semibold mb-4'>
+                                        <Shield className='w-3 h-3' />
+                                        <span>ADMIN</span>
+                                    </div>
+                                )}
+                                
+                                <div className='space-y-2'>
+                                    {/* Admin Panel Button */}
+                                    {user?.role === 'admin' && (
+                                        <motion.button
+                                            whileHover={{ scale: 1.02 }}
+                                            whileTap={{ scale: 0.98 }}
+                                            onClick={() => navigate('/admin')}
+                                            className='w-full flex items-center justify-center space-x-2 py-2 px-4 bg-gradient-to-r from-emerald-500 to-green-600 text-white font-medium rounded-lg hover:from-emerald-600 hover:to-green-700 transition-colors'
+                                        >
+                                            <Shield className='w-4 h-4' />
+                                            <span>Admin Panel</span>
+                                        </motion.button>
+                                    )}
+                                    
+                                    {/* Logout Button */}
+                                    <motion.button
+                                        whileHover={{ scale: 1.02 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        onClick={handleLogout}
+                                        className='w-full flex items-center justify-center space-x-2 py-2 px-4 bg-gradient-to-r from-red-500 to-red-600 text-white font-medium rounded-lg hover:from-red-600 hover:to-red-700 transition-colors'
+                                    >
+                                        <LogOut className='w-4 h-4' />
+                                        <span>Logout</span>
+                                    </motion.button>
+                                </div>
                             </div>
                         </motion.div>
                     )}
@@ -317,9 +619,16 @@ const DashboardPage = () => {
                                     playsInline 
                                     className='w-full h-64 object-cover'
                                 />
+                                <canvas ref={canvasRef} style={{ display: 'none' }} />
                                 {!isWebcamActive && (
                                     <div className='absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-50'>
                                         <p className='text-white'>Click "Start Live Detection" to begin</p>
+                                    </div>
+                                )}
+                                {isDetecting && (
+                                    <div className='absolute top-4 right-4 bg-red-600 text-white px-3 py-1 rounded-full flex items-center space-x-2'>
+                                        <div className='w-2 h-2 bg-white rounded-full animate-pulse'></div>
+                                        <span className='text-sm font-semibold'>LIVE</span>
                                     </div>
                                 )}
                             </div>
@@ -361,7 +670,7 @@ const DashboardPage = () => {
                         </div>
                     ) : (
                         /* File Upload Section */
-                        <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                        <div className='space-y-4'>
                             {/* File Upload Area */}
                             <motion.div
                                 whileHover={{ scale: 1.02 }}
@@ -386,37 +695,110 @@ const DashboardPage = () => {
                                 </div>
                             </motion.div>
 
-                            {/* Detection Button */}
-                            <div className='flex flex-col justify-center space-y-4'>
-                                <motion.button
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={startDetection}
-                                    disabled={!selectedFile || isDetecting}
-                                    className={`flex items-center justify-center space-x-2 py-3 px-6 rounded-lg font-semibold transition-colors ${
-                                        selectedFile && !isDetecting
-                                            ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white hover:from-emerald-600 hover:to-green-700'
-                                            : 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                                    }`}
+                            {/* Video Preview with Interactive Line */}
+                            {videoPreview && detectionMode === 'video' && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className='bg-gray-900 rounded-lg overflow-hidden border border-gray-700'
                                 >
-                                    {isDetecting ? (
-                                        <>
-                                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                                            <span>Detecting...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Camera className='w-5 h-5' />
-                                            <span>Start Detection</span>
-                                        </>
+                                    <div className='relative' ref={videoPreviewRef}>
+                                        <video 
+                                            src={videoPreview}
+                                            className='w-full max-h-[600px] min-h-[400px] object-contain bg-black'
+                                            muted
+                                            autoPlay
+                                            loop
+                                        />
+                                        {/* Interactive Counting Line */}
+                                        <div 
+                                            className='absolute w-full cursor-ns-resize hover:bg-yellow-400 transition-colors'
+                                            style={{ 
+                                                top: `${countingLinePosition}%`,
+                                                height: '4px',
+                                                backgroundColor: isDraggingLine ? '#facc15' : '#eab308',
+                                                boxShadow: '0 0 10px rgba(234, 179, 8, 0.5)',
+                                                transform: 'translateY(-50%)'
+                                            }}
+                                            onMouseDown={handleLineMouseDown}
+                                        >
+                                            <div className='absolute -top-6 left-2 bg-yellow-500 text-black px-2 py-1 rounded text-xs font-bold'>
+                                                📍 COUNTING LINE - {countingLinePosition.toFixed(0)}%
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className='p-3 bg-gray-800 border-t border-gray-700'>
+                                        <p className='text-sm text-gray-300 text-center'>
+                                            {isDraggingLine ? (
+                                                <span className='text-yellow-400 font-semibold'>✋ Adjusting line... {countingLinePosition.toFixed(0)}%</span>
+                                            ) : (
+                                                <span>🖱️ Drag the yellow line to set counting position {isProcessingVideo && '(Can adjust during processing!)'}</span>
+                                            )}
+                                        </p>
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            {/* Detection Controls */}
+                            <div className={`flex flex-col space-y-4 ${videoPreview ? 'w-full' : ''}`}>
+                                <div className='flex gap-4'>
+                                    <motion.button
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                        onClick={startDetection}
+                                        disabled={!selectedFile || isDetecting}
+                                        className={`flex-1 flex items-center justify-center space-x-2 py-3 px-6 rounded-lg font-semibold transition-colors ${
+                                            selectedFile && !isDetecting
+                                                ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white hover:from-emerald-600 hover:to-green-700'
+                                                : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                                        }`}
+                                    >
+                                        {isDetecting ? (
+                                            <>
+                                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                                <span>Detecting...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Camera className='w-5 h-5' />
+                                                <span>Start Detection</span>
+                                            </>
+                                        )}
+                                    </motion.button>
+                                    
+                                    {videoPreview && (
+                                        <motion.button
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
+                                            onClick={() => {
+                                                setSelectedFile(null);
+                                                setVideoPreview(null);
+                                                setAnnotatedImage(null);
+                                                setDetectionResults(null);
+                                            }}
+                                            className='py-3 px-6 rounded-lg font-semibold bg-gray-600 text-white hover:bg-gray-700 transition-colors'
+                                        >
+                                            Change Video
+                                        </motion.button>
                                     )}
-                                </motion.button>
+                                </div>
 
                                 {selectedFile && (
-                                    <div className='text-center'>
+                                    <div className='text-center space-y-2'>
                                         <p className='text-emerald-400 text-sm'>
                                             {selectedFile.type.startsWith('image/') ? '📷 Image' : '🎥 Video'} Ready
                                         </p>
+                                        {isProcessingVideo && (
+                                            <div className='space-y-1'>
+                                                <div className='w-full bg-gray-700 rounded-full h-2'>
+                                                    <div 
+                                                        className='bg-gradient-to-r from-emerald-500 to-green-600 h-2 rounded-full transition-all duration-300'
+                                                        style={{ width: `${videoProgress}%` }}
+                                                    ></div>
+                                                </div>
+                                                <p className='text-xs text-gray-400'>{videoProgress.toFixed(1)}% Complete</p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>

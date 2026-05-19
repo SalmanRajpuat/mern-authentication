@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "authentication": "file:..",
     "axios": "^1.9.0",
     "lucide-react": "^0.511.0",
     "react": "^19.1.0",

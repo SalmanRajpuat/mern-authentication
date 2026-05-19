@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Detection Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; background: #f5f5f5; }
+        .card { background: white; padding: 25px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        h1 { color: #333; margin: 0 0 10px 0; }
+        h2 { color: #555; margin: 20px 0 15px 0; border-bottom: 2px solid #ddd; padding-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th { background: #4CAF50; color: white; padding: 12px; text-align: left; }
+        td { padding: 10px; border-bottom: 1px solid #ddd; }
+        tr:hover { background: #f9f9f9; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
+        .stat { background: #4CAF50; color: white; padding: 20px; border-radius: 6px; text-align: center; }
+        .stat-value { font-size: 2em; font-weight: bold; }
+        .stat-label { font-size: 0.9em; margin-top: 5px; }
+        .badge { padding: 4px 10px; border-radius: 12px; font-size: 0.85em; }
+        .badge-up { background: #2196F3; color: white; }
+        .badge-down { background: #FF9800; color: white; }
+        .info { background: #e3f2fd; padding: 15px; border-left: 4px solid #2196F3; margin: 15px 0; }
+        button { background: #4CAF50; color: white; border: none; padding: 10px 20px; margin: 5px; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #45a049; }
+        @media print { button { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>📹 Video Detection Report</h1>
+        <p>Session: eb3b052d-66e... | Generated: 2026-02-23 10:14:57</p>
+    </div>
+
+    <div class="card">
+        <h2>Summary Statistics</h2>
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value">14</div>
+                <div class="stat-label">Total Crossings</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">2</div>
+                <div class="stat-label">Object Types</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">8.1s</div>
+                <div class="stat-label">Video Duration</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">97.2s</div>
+                <div class="stat-label">Processing Time</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Object Detection Results</h2>
+        <table>
+            <tr>
+                <th>Object</th>
+                <th>Total Count</th>
+                <th>Upward ↑</th>
+                <th>Downward ↓</th>
+                <th>Percentage</th>
+            </tr>
+            <tr>
+                <td><strong>Car</strong></td>
+                <td>12</td>
+                <td><span class="badge badge-up">8</span></td>
+                <td><span class="badge badge-down">4</span></td>
+                <td>85.7%</td>
+            </tr>
+            <tr>
+                <td><strong>Truck</strong></td>
+                <td>2</td>
+                <td><span class="badge badge-up">0</span></td>
+                <td><span class="badge badge-down">2</span></td>
+                <td>14.3%</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Configuration</h2>
+        <div class="info">
+            <p><strong>Counting Line Position:</strong> 66% of frame height</p>
+            <p><strong>Frame Rate:</strong> 29.97 FPS | <strong>Total Frames:</strong> 243</p>
+            <p><strong>Processing Speed:</strong> 2.50 FPS</p>
+        </div>
+    </div>
+
+    <div style="text-align: center; margin: 20px 0;">
+        <button onclick="window.print()">🖨️ Print Report</button>
+        <button onclick="window.close()">Close</button>
+    </div>
+</body>
+</html>
